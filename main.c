@@ -16,14 +16,17 @@
 #include <arpa/inet.h>
 
 int laufen;
-char* fname[35] = {0};
-FILE *f;
+char** fname;
+FILE** f;
+unsigned int f_l = 0;
 char* port;
 long usec;
 int flag_usec_zeitstempel;
+int flag_usec_edateien;
+
+
 
 void getDateTime(char buffer[], int flag_usec) {
-
     struct tm* tm_info;
     struct timeval tv;
     gettimeofday(&tv, NULL);
@@ -44,25 +47,66 @@ void sigint(int r) {
     laufen = 0;
 }
 
-int starteDatei(){
-    int i;
-    for(i = 0; i < sizeof(fname); ++i){
-        fname[i] = 0;
-    }
+int starteDatei(char* n){
+    if(n == NULL){
+        int i;
+        fname = calloc(1, sizeof(char*));
+        *fname = calloc(35, sizeof(char));
 
-    getDateTime(fname[0], 0);
-    strncat(fname[0], ".log", 4);
+        getDateTime(fname[0], 0);
+        strcat(fname[0], ".log");
 
-    f = fopen(fname[0], "w");
-    if (f == NULL) {
-        printf("Error opening file!\n");
-        return -1;
+        if(f != NULL){
+            fclose(f[0]);
+        }
+
+        f = calloc(1, sizeof(FILE*));
+        f[0] = fopen(fname[0], "a");
+
+        if(*f == NULL){
+            printf("Error opening file!\n");
+            return -1;
+        }
+
+        f_l = 1;
+    }else{
+        unsigned int f_l_t = f_l +1;
+        FILE** f_t = realloc(f, f_l_t*sizeof(FILE*));
+
+        if(f_t == NULL){
+            return -1;
+        }
+
+        char** fname_t = realloc(fname, f_l_t*sizeof(char*));
+
+        if(fname_t == NULL){
+            return -1;
+        }
+
+        fname_t[f_l] = calloc(1, (strlen(n)+5)*sizeof(char));
+
+        if(fname_t[f_l] == NULL){
+            return -1;
+        }
+
+        strcat(fname_t[f_l], n);
+        strcat(fname_t[f_l], ".log");
+
+        f[f_l] = fopen(fname[f_l], "a");
+
+        if(f[f_l] == NULL){
+            printf("Error opening file!\n");
+            return -1;
+        }
+
+        f = f_t;
+        ++f_l;
     }
 
     return 0;
 }
 
-void handle_datagram(char* s, char b[], ssize_t l) {
+void handle_datagram(char* s, char b[], size_t l) {
     char t_b[34] = {0};
     getDateTime(t_b, flag_usec_zeitstempel);
 
@@ -70,7 +114,18 @@ void handle_datagram(char* s, char b[], ssize_t l) {
     b_l[l] = 0;
     strncpy(b_l, b, l);
 
-    fprintf(f, "%s: %s: %s\n", s, t_b, b_l);
+    if(flag_usec_edateien){
+        int i;
+
+        for(i = 0; i < f_l; ++i){
+            if(strncmp(fname[i], s, strlen(s)) == 0){
+                fprintf(f[i], "%s: %s\n", t_b, b_l);
+                return;
+            }
+        }
+    }else{
+        fprintf(f[0], "%s: %s: %s\n", s, t_b, b_l);
+    }
 }
 
 int main(int argc, char **argv) {
@@ -94,6 +149,9 @@ int main(int argc, char **argv) {
         }
         if(strncmp(argv[i], "-z", 2) == 0){
             flag_usec_zeitstempel = 1;
+        }
+        if(strncmp(argv[i], "-e", 2) == 0){
+            flag_usec_edateien = 1;
         }
     }
 
@@ -132,6 +190,10 @@ int main(int argc, char **argv) {
 
     int betrieb = 0;
 
+    if(!flag_usec_edateien){
+        starteDatei;
+    }
+
     while (laufen) {
         ssize_t count = recvfrom(fd, buffer, sizeof(buffer), 0, (struct sockaddr *) &src_addr, &src_addr_len);
         if (count == -1) {
@@ -142,23 +204,20 @@ int main(int argc, char **argv) {
             if(betrieb){
                 if(strncmp(buffer, "HALT", 5) == 0){
                     betrieb = 0;
-                    fclose(f);
                 }else{
                     char* ipString = inet_ntoa(((struct sockaddr_in *) &src_addr)->sin_addr);
-                    handle_datagram(ipString, buffer, count);
+                    handle_datagram(ipString, buffer, (size_t)count);
                 }
             }else{
                 if(strncmp(buffer, "START", 5) == 0){
-                    if(!starteDatei){
-                        betrieb = 1;
-                    }
+                    betrieb = 1;
                 }
             }
         }
     }
 
-    if(betrieb){
-        fclose(f);
+    for(i = 0; i < f_l; ++i){
+        fclose(f[i]);
     }
 
     return 0;
