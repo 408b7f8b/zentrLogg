@@ -22,7 +22,8 @@ unsigned int f_l = 0;
 char* port;
 long usec;
 int flag_usec_zeitstempel;
-int flag_usec_edateien;
+int flag_edateien;
+int flag_start_halt;
 
 
 
@@ -114,7 +115,7 @@ void handle_datagram(char* s, char b[], size_t l) {
     b_l[l] = 0;
     strncpy(b_l, b, l);
 
-    if(flag_usec_edateien){
+    if(flag_edateien){
         int i;
 
         for(i = 0; i < f_l; ++i){
@@ -151,7 +152,7 @@ int main(int argc, char **argv) {
             flag_usec_zeitstempel = 1;
         }
         if(strncmp(argv[i], "-e", 2) == 0){
-            flag_usec_edateien = 1;
+            flag_edateien = 1;
         }
     }
 
@@ -190,14 +191,16 @@ int main(int argc, char **argv) {
 
     int betrieb = 0;
 
-    if(!flag_usec_edateien){
+    if(!flag_edateien){
         starteDatei;
     }
 
     while (laufen) {
         ssize_t count = recvfrom(fd, buffer, sizeof(buffer), 0, (struct sockaddr *) &src_addr, &src_addr_len);
-        if (count == -1) {
-            printf("%s", strerror(errno));
+        if (count == -1 && errno != EAGAIN) {
+            char t_b[34] = {0};
+            getDateTime(t_b, 1);
+            printf("%s: %s\n", t_b, strerror(errno));
         } else if (count == sizeof(buffer)) {
             printf("datagram too large for buffer: truncated");
         } else {
