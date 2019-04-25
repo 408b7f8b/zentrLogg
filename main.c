@@ -16,12 +16,12 @@
 #include <arpa/inet.h>
 #include <stdbool.h>
 
-int laufen;
-char* fname;
-FILE* f;
+bool run;
+char* file_name;
+FILE* file_handler;
 char* port;
-long usec;
-int flag_usec_zeitstempel;
+long rcv_timeout_usec;
+bool flag_usec_in_timestamp;
 
 void getDateTime(char buffer[], int flag_usec) {
     struct tm* tm_info;
@@ -31,7 +31,7 @@ void getDateTime(char buffer[], int flag_usec) {
     tm_info = localtime(&tv.tv_sec);
     strftime(buffer, 26, "%Y-%m-%dT%H:%M:%S", tm_info);
 
-    if (flag_usec_zeitstempel) {
+    if (flag_usec_in_timestamp) {
         sprintf(buffer, "%s.%06li", buffer, tv.tv_usec);
     } else {
         int millisec = 0;
@@ -41,23 +41,23 @@ void getDateTime(char buffer[], int flag_usec) {
 }
 
 void sigint(int r) {
-    laufen = 0;
+    run = false;
 }
 
 int starteDatei() {
     int i;
-    fname = calloc(35, sizeof(char*));
+    file_name = calloc(35, sizeof(char*));
 
-    getDateTime(fname, 0);
-    strcat(fname, ".log");
+    getDateTime(file_name, 0);
+    strcat(file_name, ".log");
 
-    if (f != NULL) {
-        fclose(f);
+    if (file_handler != NULL) {
+        fclose(file_handler);
     }
 
-    f = fopen(fname, "a");
+    file_handler = fopen(file_name, "a");
 
-    if (f == NULL) {
+    if (file_handler == NULL) {
         printf("Error opening file!\n");
         return -1;
     }
@@ -67,15 +67,14 @@ int starteDatei() {
 
 void handle_datagram(char* s, char b[], size_t l) {
 
-
     char t_b[34] = {0};
-    getDateTime(t_b, flag_usec_zeitstempel);
+    getDateTime(t_b, flag_usec_in_timestamp);
 
     char b_l[l + 1];
     b_l[l] = 0;
     strncpy(b_l, b, l);
 
-    fprintf(f, "%s: %s: %s\n", s, t_b, b_l);
+    fprintf(file_handler, "%s: %s: %s\n", s, t_b, b_l);
 
     printf("%s: Got and wrote datagram from %s\n", t_b, s);
 }
@@ -85,22 +84,22 @@ int main(int argc, char** argv) {
     signal(SIGINT, sigint);
     signal(SIGTERM, sigint);
 
-    laufen = 1;
-    f = NULL;
+    run = true;
+    file_handler = NULL;
     port = "1338";
-    usec = 100000;
-    flag_usec_zeitstempel = 0;
+    rcv_timeout_usec = 100000;
+    flag_usec_in_timestamp = false;
 
     int i;
     for (i = 0; i < argc - 1; ++i) {
         if (strncmp(argv[i], "-p", 2) == 0) {
             port = argv[++i];
         }
-        if (strncmp(argv[i], "-u", 2) == 0) {
-            usec = strtoul(argv[++i], NULL, 10);
+        else if (strncmp(argv[i], "-u", 2) == 0) {
+            rcv_timeout_usec = strtoul(argv[++i], NULL, 10);
         }
-        if (strncmp(argv[i], "-z", 2) == 0) {
-            flag_usec_zeitstempel = 1;
+        else if (strncmp(argv[i], "-z", 2) == 0) {
+            flag_usec_in_timestamp = true;
         }
     }
 
@@ -130,16 +129,16 @@ int main(int argc, char** argv) {
 
     struct timeval read_timeout;
     read_timeout.tv_sec = 0;
-    read_timeout.tv_usec = usec;
+    read_timeout.tv_usec = rcv_timeout_usec;
     setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof(read_timeout));
 
     struct sockaddr_storage src_addr;
     socklen_t src_addr_len = sizeof(src_addr);
 
-    int betrieb = 0;
+    bool mitschreiben = 0;
     starteDatei();
 
-    while (laufen) {
+    while (run) {
         char buffer[1024] = {0};
 
         ssize_t count = recvfrom(fd, buffer, sizeof(buffer), 0, (struct sockaddr*) &src_addr, &src_addr_len);
@@ -150,22 +149,22 @@ int main(int argc, char** argv) {
         } else if (count == sizeof(buffer)) {
             printf("datagram too large for buffer: truncated");
         } else {
-            if (betrieb) {
+            if (mitschreiben) {
                 if (strncmp(buffer, "HALT", 5) == 0) {
-                    betrieb = 0;
+                    mitschreiben = 0;
                 } else {
                     char* ipString = inet_ntoa(((struct sockaddr_in*) &src_addr)->sin_addr);
                     handle_datagram(ipString, buffer, (size_t) count);
                 }
             } else {
                 if (strncmp(buffer, "START", 5) == 0) {
-                    betrieb = 1;
+                    mitschreiben = 1;
                 }
             }
         }
     }
 
-    fclose(f);
+    fclose(file_handler);
 
     return 0;
 
