@@ -20,9 +20,9 @@
     if(strcmp(param, cmp_string) == 0 && strlen(param) == strlen(cmp_string))
 
 bool run;
-char* file_name;
-FILE* file_handler;
-char* port;
+char* file_name = NULL;
+FILE* file_handler = NULL;
+char* port = NULL;
 long rcv_timeout_usec;
 bool flag_usec_in_timestamp;
 
@@ -81,6 +81,7 @@ void handle_datagram(char* s, char b[], size_t l) {
         fprintf(file_handler, "%s: %s: %s\n", s, t_b, b_l);
         printf("%s: Got and wrote datagram from %s\n", t_b, s);
         fclose(file_handler);
+        file_handler = NULL;
     }
 }
 
