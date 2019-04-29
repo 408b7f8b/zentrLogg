@@ -48,12 +48,15 @@ void sigint(int r) {
 }
 
 int starteDatei(char* pfad) {
-    int i;
+
+    char zeitstempel[256] = {0};
+    getDateTime(zeitstempel, 0);
+    strcat(zeitstempel, ".log");
+
     file_name = calloc(strlen(pfad) + 35, sizeof(char*));
 
     strncpy(file_name, pfad, strlen(pfad));
-    getDateTime(file_name, 0);
-    strcat(file_name, ".log");
+    strncat(file_name, zeitstempel, strlen(zeitstempel));
 
     if (file_handler != NULL) {
         fclose(file_handler);
@@ -162,7 +165,7 @@ int main(int argc, char** argv) {
             printf("%s: %s\n", t_b, strerror(errno));
         } else if (count == sizeof(buffer)) {
             printf("datagram too large for buffer: truncated");
-        } else {
+        } else if (count != -1){
             switch (mitschreiben) {
                 case 0:{
                     if (strncmp(buffer, "START", 5) == 0) {
