@@ -1,7 +1,7 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 2.4)
 project(zentrLogg)
 
-set(CMAKE_C_STANDARD 90)
+set(CMAKE_C_STANDARD 99)
 
 add_executable(zentrLogg main.c)
 add_executable(zentrLoggTest test.c)

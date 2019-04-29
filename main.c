@@ -16,6 +16,9 @@
 #include <arpa/inet.h>
 #include <stdbool.h>
 
+#define cmdlineparamvar(param, cmp_string)                                          \
+    if(strcmp(param, cmp_string) == 0 && strlen(param) == strlen(cmp_string))
+
 bool run;
 char* file_name;
 FILE* file_handler;
@@ -44,10 +47,11 @@ void sigint(int r) {
     run = false;
 }
 
-int starteDatei() {
+int starteDatei(char* pfad) {
     int i;
-    file_name = calloc(35, sizeof(char*));
+    file_name = calloc(strlen(pfad) + 35, sizeof(char*));
 
+    strncpy(file_name, pfad, strlen(pfad));
     getDateTime(file_name, 0);
     strcat(file_name, ".log");
 
@@ -79,6 +83,8 @@ void handle_datagram(char* s, char b[], size_t l) {
     printf("%s: Got and wrote datagram from %s\n", t_b, s);
 }
 
+#define PFAD 256
+
 int main(int argc, char** argv) {
 
     signal(SIGINT, sigint);
@@ -89,17 +95,26 @@ int main(int argc, char** argv) {
     port = "1338";
     rcv_timeout_usec = 100000;
     flag_usec_in_timestamp = false;
+    int mitschreiben = 2;
+    char ordner[PFAD] = {0};
 
     int i;
     for (i = 0; i < argc - 1; ++i) {
-        if (strncmp(argv[i], "-p", 2) == 0) {
+        cmdlineparamvar(argv[i], "-p"){
             port = argv[++i];
-        }
-        else if (strncmp(argv[i], "-u", 2) == 0) {
+        }else cmdlineparamvar(argv[i], "-u"){
             rcv_timeout_usec = strtoul(argv[++i], NULL, 10);
-        }
-        else if (strncmp(argv[i], "-z", 2) == 0) {
+        }else cmdlineparamvar(argv[i], "-z"){
             flag_usec_in_timestamp = true;
+        }else cmdlineparamvar(argv[i], "-c"){
+            mitschreiben = 0;
+        }else cmdlineparamvar(argv[i], "-o"){
+            if(strlen(argv[++i]) > PFAD){
+                printf("-o path too long\n");
+                return -1;
+            }
+
+            strncpy(ordner, argv[i], strlen(argv[i]));
         }
     }
 
@@ -135,8 +150,7 @@ int main(int argc, char** argv) {
     struct sockaddr_storage src_addr;
     socklen_t src_addr_len = sizeof(src_addr);
 
-    bool mitschreiben = 0;
-    starteDatei();
+    starteDatei(ordner);
 
     while (run) {
         char buffer[1024] = {0};
@@ -149,16 +163,25 @@ int main(int argc, char** argv) {
         } else if (count == sizeof(buffer)) {
             printf("datagram too large for buffer: truncated");
         } else {
-            if (mitschreiben) {
-                if (strncmp(buffer, "HALT", 5) == 0) {
-                    mitschreiben = 0;
-                } else {
+            switch (mitschreiben) {
+                case 0:{
+                    if (strncmp(buffer, "START", 5) == 0) {
+                        mitschreiben = 1;
+                    }
+                    break;
+                }
+                case 1:{
+                    if (strncmp(buffer, "HALT", 5) == 0) {
+                        mitschreiben = 0;
+                    } else {
+                        char* ipString = inet_ntoa(((struct sockaddr_in*) &src_addr)->sin_addr);
+                        handle_datagram(ipString, buffer, (size_t) count);
+                    }
+                    break;
+                }
+                default:{
                     char* ipString = inet_ntoa(((struct sockaddr_in*) &src_addr)->sin_addr);
                     handle_datagram(ipString, buffer, (size_t) count);
-                }
-            } else {
-                if (strncmp(buffer, "START", 5) == 0) {
-                    mitschreiben = 1;
                 }
             }
         }
