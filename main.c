@@ -47,7 +47,7 @@ void sigint(int r) {
     run = false;
 }
 
-int starteDatei(char* pfad) {
+void starteDatei(char* pfad) {
 
     char zeitstempel[256] = {0};
     getDateTime(zeitstempel, 0);
@@ -58,18 +58,6 @@ int starteDatei(char* pfad) {
     strncpy(file_name, pfad, strlen(pfad));
     strncat(file_name, zeitstempel, strlen(zeitstempel));
 
-    if (file_handler != NULL) {
-        fclose(file_handler);
-    }
-
-    file_handler = fopen(file_name, "a");
-
-    if (file_handler == NULL) {
-        printf("Error opening file!\n");
-        return -1;
-    }
-
-    return 0;
 }
 
 void handle_datagram(char* s, char b[], size_t l) {
@@ -81,9 +69,19 @@ void handle_datagram(char* s, char b[], size_t l) {
     b_l[l] = 0;
     strncpy(b_l, b, l);
 
-    fprintf(file_handler, "%s: %s: %s\n", s, t_b, b_l);
+    if (file_handler != NULL) {
+        fclose(file_handler);
+    }
 
-    printf("%s: Got and wrote datagram from %s\n", t_b, s);
+    file_handler = fopen(file_name, "a");
+
+    if (file_handler == NULL) {
+        printf("%s: Got datagram from %s, but failed to open file\n", t_b, s);
+    }else{
+        fprintf(file_handler, "%s: %s: %s\n", s, t_b, b_l);
+        printf("%s: Got and wrote datagram from %s\n", t_b, s);
+        fclose(file_handler);
+    }
 }
 
 #define PFAD 256
@@ -189,8 +187,6 @@ int main(int argc, char** argv) {
             }
         }
     }
-
-    fclose(file_handler);
 
     return 0;
 
